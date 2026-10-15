@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Project 10K: Stride Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            bg: '#09090B',
+                            surface: '#18181B',
+                            hover: '#27272A',
+                            accent: '#F97316', // Orange
+                            secondary: '#06B6D4', // Cyan
+                            border: '#3F3F46'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #09090B; color: #F4F4F5; -webkit-tap-highlight-color: transparent; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        
+        /* Custom Range Slider */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%;
+            background: var(--slider-color, #10B981); cursor: pointer; margin-top: -8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5); transition: background 0.2s;
+        }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: #3F3F46; border-radius: 4px; }
+        
+        .modal-enter { animation: modalFadeIn 0.2s ease-out forwards; }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(100%); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Native Details/Summary tweaks */
+        details summary::-webkit-details-marker { display: none; }
+        details > summary { list-style: none; }
+        details[open] summary .arrow { transform: rotate(180deg); }
+    </style>
+</head>
+<body class="antialiased pb-24 max-w-lg mx-auto relative min-h-screen">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 bg-brand-bg/90 backdrop-blur-md border-b border-brand-border px-5 py-4 flex justify-between items-end">
+        <div>
+            <h1 class="font-black text-2xl tracking-tight leading-none mb-1">Stride Engine</h1>
+            <p class="text-xs text-zinc-400 font-medium">Path to 10K • 5-Week Block</p>
+        </div>
+    </header>
+
+    <main class="p-5 space-y-6">
+        
+        <!-- Stats Row -->
+        <div class="grid grid-cols-3 gap-3">
+            <div class="bg-brand-surface border border-brand-border rounded-xl p-3 text-center">
+                <div class="text-xl font-black text-white" id="stat-dist">0.0</div>
+                <div class="text-[10px] uppercase tracking-wider text-zinc-400 mt-1 font-bold">Total KM</div>
+            </div>
+            <div class="bg-brand-surface border border-brand-border rounded-xl p-3 text-center">
+                <div class="text-xl font-black text-white" id="stat-runs">0/18</div>
+                <div class="text-[10px] uppercase tracking-wider text-zinc-400 mt-1 font-bold">Sessions</div>
+            </div>
+            <button onclick="exportData()" class="bg-brand-surface border border-brand-accent/50 hover:bg-brand-hover rounded-xl p-3 text-center transition active:scale-95">
+                <div class="text-xl font-black text-brand-accent">↓</div>
+                <div class="text-[10px] uppercase tracking-wider text-brand-accent mt-1 font-bold">Backup</div>
+            </button>
+        </div>
+
+        <!-- Pinned Next Run Card -->
+        <section id="next-run-container"></section>
+
+        <!-- Timeline Accordions -->
+        <section id="timeline-container" class="space-y-3"></section>
+
+    </main>
+
+    <!-- Modals -->
+
+    <!-- Log Run Modal -->
+    <div id="log-modal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-brand-surface w-full max-w-lg rounded-t-3xl border-t border-brand-border shadow-2xl modal-enter overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-brand-border flex justify-between items-center bg-brand-bg">
+                <h3 class="font-bold text-lg">Log Workout</h3>
+                <button onclick="closeModal('log-modal')" class="text-zinc-400 p-2 -mr-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6 overflow-y-auto hide-scroll space-y-6">
+                <input type="hidden" id="log-run-id">
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Distance (KM)</label>
+                        <input type="number" id="log-dist" step="0.01" class="w-full bg-brand-bg border border-brand-border rounded-xl p-3 text-lg font-bold focus:border-brand-accent outline-none transition text-white" placeholder="0.00" oninput="calcPace()">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Avg HR (BPM)</label>
+                        <input type="number" id="log-hr" class="w-full bg-brand-bg border border-brand-border rounded-xl p-3 text-lg font-bold focus:border-brand-accent outline-none transition text-white" placeholder="e.g. 150" oninput="calcPace()">
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-xl bg-brand-bg border border-brand-border relative">
+                    <label class="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Moving Time</label>
+                    <div class="flex items-center gap-3 mb-4">
+                        <input type="number" id="log-min" class="w-24 bg-brand-surface border border-brand-border rounded-xl p-3 text-center text-lg font-bold outline-none text-white focus:border-brand-accent transition" placeholder="Min" oninput="calcPace()">
+                        <span class="font-bold text-zinc-500 text-xl">:</span>
+                        <input type="number" id="log-sec" class="w-24 bg-brand-surface border border-brand-border rounded-xl p-3 text-center text-lg font-bold outline-none text-white focus:border-brand-accent transition" placeholder="Sec" oninput="calcPace()">
+                    </div>
+                    <div class="flex justify-between items-center pt-3 border-t border-brand-border">
+                        <span class="text-xs font-bold text-zinc-400 uppercase tracking-wider">Avg Pace</span>
+                        <span class="text-xl font-black text-brand-secondary" id="log-pace-display">--:-- /km</span>
+                    </div>
+                    <div class="text-right text-xs font-bold mt-1" id="log-zone-display"></div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <label class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Effort (RPE)</label>
+                        <span class="text-sm font-black" id="log-effort-val" style="color: #10B981;">5 / 10</span>
+                    </div>
+                    <input type="range" id="log-effort" min="1" max="10" value="5" oninput="updateEffortColor(this.value)">
+                    <div class="flex justify-between text-[10px] text-zinc-500 font-bold uppercase mt-2">
+                        <span>Easy</span><span>Hard</span><span>All Out</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Notes</label>
+                    <textarea id="log-notes" rows="2" class="w-full bg-brand-bg border border-brand-border rounded-xl p-3 text-sm focus:border-brand-accent outline-none text-white placeholder-zinc-600 transition" placeholder="How did it feel? GPS dropouts?"></textarea>
+                </div>
+                
+                <button onclick="saveLog()" class="w-full py-4 rounded-xl bg-brand-accent text-white font-black uppercase tracking-wider active:scale-95 transition">Save Workout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reschedule Modal -->
+    <div id="shift-modal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-brand-surface w-full max-w-lg rounded-t-3xl border-t border-brand-border shadow-2xl modal-enter p-6">
+            <h3 class="font-bold text-xl mb-2 text-white">Manage Schedule</h3>
+            <p class="text-sm text-zinc-400 mb-6">Life happens. Shift this run and all future runs forward, or skip it entirely to keep the timeline intact.</p>
+            
+            <input type="hidden" id="shift-run-id">
+            
+            <div class="space-y-3">
+                <button onclick="shiftSchedule(1)" class="w-full p-4 rounded-xl bg-brand-bg border border-brand-border text-left hover:border-brand-secondary transition">
+                    <div class="font-bold text-sm text-white">Delay Everything +1 Day</div>
+                    <div class="text-[11px] text-zinc-500 mt-1 uppercase font-bold tracking-wider">Shifts timeline forward</div>
+                </button>
+                <button onclick="shiftSchedule(2)" class="w-full p-4 rounded-xl bg-brand-bg border border-brand-border text-left hover:border-brand-secondary transition">
+                    <div class="font-bold text-sm text-white">Delay Everything +2 Days</div>
+                    <div class="text-[11px] text-zinc-500 mt-1 uppercase font-bold tracking-wider">Shifts timeline forward</div>
+                </button>
+                
+                <div class="my-4 border-t border-brand-border"></div>
+
+                <button onclick="skipRun()" class="w-full py-4 rounded-xl border border-red-500/30 bg-red-500/10 text-red-500 font-bold hover:bg-red-500/20 transition">
+                    Mark as Skipped
+                </button>
+                
+                <button onclick="closeModal('shift-modal')" class="w-full py-4 rounded-xl bg-transparent text-zinc-400 font-bold mt-2 hover:text-white transition">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 18-Session Data Plan with Coach Notes & Target Times
+        const basePlan = [
+            { id: "w0_1", week: 0, title: "Transition Base", targetDist: 4.4, type: "Base", targetPace: "6:30-6:45", targetHr: "141-155", targetTime: "~29:00", note: "Baseline established. Good job banking the real distance despite the GPS glitch." },
+            { id: "w0_2", week: 0, title: "Aerobic Primer", targetDist: 3.5, type: "Base", targetPace: "7:20-7:40", targetHr: "<155", targetTime: "~26:00", note: "Keep breathing strictly conversational. Focus on quick 165+ spm cadence." },
+            { id: "w0_3", week: 0, title: "Bridge Long Run", targetDist: 5.0, type: "Long", targetPace: "7:30", targetHr: "<155", targetTime: "~37:30", note: "Treat this as a slow rehearsal. Walk 45s immediately if HR spikes past 155." },
+            
+            { id: "w1_1", week: 1, title: "Aerobic Foundation", targetDist: 4.0, type: "Base", targetPace: "7:20-7:45", targetHr: "<155", targetTime: "~30:00", note: "Smooth and easy. Don't let the first km be too fast." },
+            { id: "w1_2", week: 1, title: "Pace Rhythm", targetDist: 3.5, type: "Tempo", targetPace: "2km @ 6:15", targetHr: "Zone 3/4", targetTime: "~23:00", note: "Warm up slow, lock into a hard but sustainable 6:15 rhythm for the middle 2km." },
+            { id: "w1_3", week: 1, title: "Base Expansion", targetDist: 6.0, type: "Long", targetPace: "7:30-7:50", targetHr: "<155", targetTime: "~46:00", note: "New territory! Hydrate beforehand. Keep your strides compact under your hips." },
+            
+            { id: "w2_1", week: 2, title: "Aerobic Maint.", targetDist: 4.5, type: "Base", targetPace: "7:20-7:45", targetHr: "<155", targetTime: "~34:00", note: "Recovery focused base. Keep it strictly Zone 2." },
+            { id: "w2_2", week: 2, title: "Neuromuscular", targetDist: 4.0, type: "Speed", targetPace: "4x400m @ 5:30", targetHr: "Zone 4/5", targetTime: "~25:00", note: "Short speed bursts to wake up fast-twitch fibers. Walk 90s between intervals." },
+            { id: "w2_3", week: 2, title: "Endurance Step", targetDist: 7.5, type: "Long", targetPace: "7:30-7:50", targetHr: "<155", targetTime: "~57:00", note: "Take a sip of water at 4km. Monitor HR closely on slight inclines." },
+            
+            { id: "w3_1", week: 3, title: "Aerobic Cruise", targetDist: 5.0, type: "Base", targetPace: "7:20-7:45", targetHr: "<155", targetTime: "~38:00", note: "You've done this distance before. Relax the shoulders and make it feel effortless." },
+            { id: "w3_2", week: 3, title: "Tempo Cruise", targetDist: 4.5, type: "Tempo", targetPace: "2.5km @ 6:10", targetHr: "Zone 3/4", targetTime: "~30:00", note: "Sustain the tempo block. Focus on arm swing when legs get heavy." },
+            { id: "w3_3", week: 3, title: "Mental Barrier", targetDist: 9.0, type: "Long", targetPace: "7:30-7:50", targetHr: "<155", targetTime: "~1:09:00", note: "The mental dress rehearsal. Take 1 gel or 3 dates at 5km." },
+            
+            { id: "w4_1", week: 4, title: "Regen Flush", targetDist: 4.0, type: "Recovery", targetPace: "7:30", targetHr: "<145", targetTime: "~30:00", note: "Deload week. Very easy effort to let your tendons and bones remodel." },
+            { id: "w4_2", week: 4, title: "Light Strides", targetDist: 3.5, type: "Speed", targetPace: "4x20s strides", targetHr: "Aerobic", targetTime: "~25:00", note: "Keep legs snappy with short 20s accelerations, but no deep lactic burn." },
+            { id: "w4_3", week: 4, title: "Active Maint.", targetDist: 6.0, type: "Deload", targetPace: "7:40", targetHr: "<150", targetTime: "~46:00", note: "Active cruise. Just keeping the engine warm for next week's peak." },
+            
+            { id: "w5_1", week: 5, title: "Pre-Milestone", targetDist: 5.0, type: "Base", targetPace: "7:20", targetHr: "<155", targetTime: "~36:00", note: "Final base run. Keep legs light and fresh. No heavy pushing." },
+            { id: "w5_2", week: 5, title: "Final Shakeout", targetDist: 3.0, type: "Tempo", targetPace: "Easy", targetHr: "Zone 1", targetTime: "~22:00", note: "Final tune-up. Carb-up well on Friday and Saturday with pasta or rice." },
+            { id: "w5_3", week: 5, title: "10K MILESTONE", targetDist: 10.0, type: "Race", targetPace: "6:45-7:15", targetHr: "Controlled", targetTime: "~1:10:00", note: "The Goal. Break it into two 5Ks. Execute steady pacing and trust your engine." }
+        ];
+
+        // Init State (Week 0 Tuesday pre-logged)
+        let defaultState = {
+            logs: {
+                "w0_1": { dist: 4.4, pace: "6:34", hr: 180, effort: 8, note: "GPS glitched, real dist banked.", status: "completed" }
+            },
+            startDate: new Date("2026-10-13T00:00:00").getTime(), // Oct 13, 2026 (Tuesday)
+            shifts: 0 // Global shift in days
+        };
+
+        let state = JSON.parse(localStorage.getItem('stride_engine_v3')) || defaultState;
+
+        // Utilities
+        function formatDate(ms) {
+            return new Date(ms).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+
+        function getZoneLabel(hr) {
+            if(!hr) return { text: "--", color: "text-zinc-500" };
+            if(hr < 141) return { text: "Z1 (Recovery)", color: "text-emerald-500" };
+            if(hr <= 155) return { text: "Z2 (Base)", color: "text-brand-secondary" };
+            if(hr <= 169) return { text: "Z3 (Tempo)", color: "text-yellow-500" };
+            if(hr <= 184) return { text: "Z4 (Threshold)", color: "text-brand-accent" };
+            return { text: "Z5 (Max)", color: "text-red-500" };
+        }
+
+        // Generate dynamic timeline
+        function getTimeline() {
+            const timeline = [];
+            const baseMs = state.startDate;
+            const dayOffset = 24 * 60 * 60 * 1000;
+            const spacing = [0, 3, 5]; // Offset days: Tue, Fri, Sun
+            
+            basePlan.forEach((run, index) => {
+                const week = Math.floor(index / 3);
+                const dayInWeek = index % 3;
+                const totalDaysShift = (week * 7) + spacing[dayInWeek] + state.shifts;
+                
+                timeline.push({
+                    ...run,
+                    dateMs: baseMs + (totalDaysShift * dayOffset),
+                    log: state.logs[run.id] || null
+                });
+            });
+            return timeline;
+        }
+
+        // Render App
+        function renderApp() {
+            const timeline = getTimeline();
+            const heroContainer = document.getElementById('next-run-container');
+            const timelineContainer = document.getElementById('timeline-container');
+            
+            let nextRun = null;
+            let totalDist = 0;
+            let completedCount = 0;
+            const weeks = {};
+
+            timeline.forEach(run => {
+                if(run.log && run.log.status === 'completed') {
+                    totalDist += parseFloat(run.log.dist);
+                    completedCount++;
+                }
+                if(!run.log && !nextRun) nextRun = run;
+                
+                if(!weeks[run.week]) weeks[run.week] = [];
+                weeks[run.week].push(run);
+            });
+
+            // Update Stats Header
+            document.getElementById('stat-dist').innerText = totalDist.toFixed(1);
+            document.getElementById('stat-runs').innerText = `${completedCount}/18`;
+
+            // Render Hero
+            if (nextRun) {
+                heroContainer.innerHTML = `
+                    <div class="bg-gradient-to-br from-brand-surface to-[#121215] border border-brand-accent/50 rounded-2xl p-5 relative overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.4)]">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-brand-accent"></div>
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="text-[10px] font-black text-brand-accent uppercase tracking-[0.2em] bg-brand-accent/10 px-2 py-1 rounded-md">Next Up</div>
+                            <div class="text-sm font-bold text-brand-secondary">${formatDate(nextRun.dateMs)}</div>
+                        </div>
+                        <h2 class="text-2xl font-black mb-1">${nextRun.targetDist} KM <span class="font-normal text-white/80">|</span> ${nextRun.title}</h2>
+                        
+                        <div class="bg-black/40 rounded-xl p-3 my-4 grid grid-cols-2 gap-3 border border-white/5">
+                            <div><div class="text-[10px] text-zinc-500 font-bold uppercase mb-0.5">Target Pace</div><div class="font-bold text-sm text-white">${nextRun.targetPace}</div></div>
+                            <div><div class="text-[10px] text-zinc-500 font-bold uppercase mb-0.5">Target Time</div><div class="font-bold text-sm text-white">${nextRun.targetTime}</div></div>
+                            <div class="col-span-2"><div class="text-[10px] text-zinc-500 font-bold uppercase mb-0.5">HR Limit</div><div class="font-bold text-sm text-brand-secondary">${nextRun.targetHr}</div></div>
+                        </div>
+
+                        <div class="mb-5 border-l-2 border-brand-secondary/50 pl-3">
+                            <div class="text-[10px] text-brand-secondary font-bold uppercase tracking-wider mb-1">Coach's Note</div>
+                            <p class="text-sm text-zinc-300 italic leading-snug">${nextRun.note}</p>
+                        </div>
+                        
+                        <div class="flex gap-3">
+                            <button class="flex-1 bg-brand-accent text-white font-black uppercase text-sm py-3 rounded-xl active:scale-95 transition" onclick="openLogModal('${nextRun.id}', ${nextRun.targetDist})">Log Run</button>
+                            <button class="flex-[0.4] bg-brand-hover border border-brand-border text-white font-black uppercase text-sm py-3 rounded-xl active:scale-95 transition" onclick="openShiftModal('${nextRun.id}')">Shift</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                heroContainer.innerHTML = `<div class="bg-emerald-900/20 border border-emerald-500/50 p-6 rounded-2xl text-center"><h2 class="text-xl font-black text-emerald-400">10K Program Completed! 🏆</h2></div>`;
+            }
+
+            // Render Accordions
+            timelineContainer.innerHTML = '';
+            Object.keys(weeks).forEach(wk => {
+                const weekRuns = weeks[wk];
+                const allDone = weekRuns.every(r => r.log);
+                
+                let html = `
+                <details class="bg-brand-surface border border-brand-border rounded-xl overflow-hidden" ${allDone ? '' : 'open'}>
+                    <summary class="p-4 flex justify-between items-center cursor-pointer select-none font-bold outline-none">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg">Week ${wk}</span>
+                            <span class="text-xs font-normal text-zinc-500 bg-black/50 px-2 py-0.5 rounded-full">${weekRuns.filter(r=>r.log).length}/3 Done</span>
+                        </div>
+                        <svg class="w-5 h-5 text-zinc-500 arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </summary>
+                    <div class="p-3 border-t border-brand-border space-y-2 bg-black/20">`;
+                
+                weekRuns.forEach(run => {
+                    let stHtml = '', logHtml = '', borderCls = 'border-brand-border/50 bg-white/[0.02]', typeCol = 'text-zinc-300';
+                    
+                    if(run.log) {
+                        if(run.log.status === 'completed') {
+                            borderCls = 'border-emerald-500/30 bg-emerald-500/5';
+                            stHtml = `<span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded">Done</span>`;
+                            logHtml = `
+                                <div class="mt-2 pt-2 border-t border-brand-border/50 grid grid-cols-2 gap-2 text-xs">
+                                    <div><span class="text-zinc-500">Pace:</span> <strong class="text-white">${run.log.pace}</strong></div>
+                                    <div><span class="text-zinc-500">HR:</span> <strong class="${getZoneLabel(run.log.hr).color}">${run.log.hr || '--'} bpm</strong></div>
+                                    ${run.log.note ? `<div class="col-span-2 text-zinc-400 italic font-medium mt-1">"${run.log.note}"</div>` : ''}
+                                </div>`;
+                        } else {
+                            borderCls = 'border-brand-border opacity-50 bg-transparent';
+                            stHtml = `<span class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-800 px-2 py-1 rounded">Skipped</span>`;
+                        }
+                    }
+
+                    if(run.type === 'Race') typeCol = 'text-brand-accent';
+                    if(run.type === 'Long') typeCol = 'text-brand-secondary';
+
+                    html += `
+                        <div class="p-3 border rounded-lg ${borderCls}">
+                            <div class="flex justify-between items-center mb-1">
+                                <div class="text-xs font-bold text-zinc-400">${formatDate(run.dateMs)}</div>
+                                ${stHtml}
+                            </div>
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-lg font-black text-white">${run.log?.dist || run.targetDist} KM</span>
+                                <span class="text-sm font-bold ${typeCol}">${run.title}</span>
+                            </div>
+                            ${logHtml}
+                        </div>
+                    `;
+                });
+                html += `</div></details>`;
+                timelineContainer.innerHTML += html;
+            });
+        }
+
+        // Logic: Modal & Input
+        function openLogModal(id, targetDist) {
+            document.getElementById('log-run-id').value = id;
+            document.getElementById('log-dist').value = targetDist;
+            document.getElementById('log-min').value = '';
+            document.getElementById('log-sec').value = '';
+            document.getElementById('log-hr').value = '';
+            document.getElementById('log-effort').value = 5;
+            updateEffortColor(5);
+            document.getElementById('log-notes').value = '';
+            calcPace();
+            document.getElementById('log-modal').classList.remove('hidden');
+            document.getElementById('log-modal').classList.add('flex');
+        }
+
+        function openShiftModal(id) {
+            document.getElementById('shift-run-id').value = id;
+            document.getElementById('shift-modal').classList.remove('hidden');
+            document.getElementById('shift-modal').classList.add('flex');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+            document.getElementById(modalId).classList.remove('flex');
+        }
+
+        function calcPace() {
+            const dist = parseFloat(document.getElementById('log-dist').value);
+            const m = parseInt(document.getElementById('log-min').value) || 0;
+            const s = parseInt(document.getElementById('log-sec').value) || 0;
+            const hr = parseInt(document.getElementById('log-hr').value) || 0;
+            
+            let paceStr = "--:--";
+            if(dist > 0 && (m > 0 || s > 0)) {
+                const totalMin = m + (s / 60);
+                const paceDec = totalMin / dist;
+                const pM = Math.floor(paceDec);
+                const pS = Math.round((paceDec - pM) * 60).toString().padStart(2, '0');
+                paceStr = `${pM}:${pS}`;
+            }
+            
+            document.getElementById('log-pace-display').innerText = `${paceStr} /km`;
+            
+            const zl = getZoneLabel(hr);
+            const zEl = document.getElementById('log-zone-display');
+            zEl.innerText = zl.text;
+            zEl.className = `text-right text-xs font-bold mt-1 ${zl.color}`;
+            
+            return paceStr;
+        }
+
+        function updateEffortColor(val) {
+            const el = document.getElementById('log-effort-val');
+            el.innerText = `${val} / 10`;
+            let color = '#10B981'; // Green
+            if (val > 3) color = '#EAB308'; // Yellow
+            if (val > 6) color = '#F97316'; // Orange
+            if (val > 8) color = '#EF4444'; // Red
+            el.style.color = color;
+            document.documentElement.style.setProperty('--slider-color', color);
+        }
+
+        function saveLog() {
+            const id = document.getElementById('log-run-id').value;
+            const dist = parseFloat(document.getElementById('log-dist').value) || 0;
+            const pace = calcPace();
+            const hr = document.getElementById('log-hr').value;
+            const rpe = document.getElementById('log-effort').value;
+            const note = document.getElementById('log-notes').value;
+            
+            state.logs[id] = { dist: dist.toFixed(2), pace, hr, effort: rpe, note, status: 'completed' };
+            
+            localStorage.setItem('stride_engine_v3', JSON.stringify(state));
+            closeModal('log-modal');
+            renderApp();
+        }
+
+        // Logic: Reschedule
+        function shiftSchedule(days) {
+            state.shifts += days;
+            localStorage.setItem('stride_engine_v3', JSON.stringify(state));
+            closeModal('shift-modal');
+            renderApp();
+        }
+
+        function skipRun() {
+            const id = document.getElementById('shift-run-id').value;
+            state.logs[id] = { status: 'skipped' };
+            localStorage.setItem('stride_engine_v3', JSON.stringify(state));
+            closeModal('shift-modal');
+            renderApp();
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const a = document.createElement('a');
+            a.href = dataStr;
+            a.download = "stride_engine_backup.json";
+            a.click();
+        }
+
+        // Initialize
+        renderApp();
+    </script>
+</body>
+</html>
