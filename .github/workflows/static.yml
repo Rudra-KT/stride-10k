@@ -1,43 +1,75 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+name: Build and deploy to GitHub Pages
 
 on:
-  # Runs on pushes targeting the default branch
   push:
-    branches: ["main"]
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+    branches:
+      - main
 
 jobs:
-  # Single deploy job since we're just deploying
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build_and_deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          # Upload entire repository
-          path: '.'
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ] || [ -f package.json ]; then
+            npm ci || npm install
+          else
+            echo "No package.json found — skipping npm install"
+          fi
+
+      - name: Build (if package.json has a build script)
+        run: |
+          if [ -f package.json ]; then
+            if npm run | grep -q " build"; then
+              npm run build
+            else
+              echo "No build script in package.json — skipping build"
+            fi
+          else
+            echo "No package.json — nothing to build"
+          fi
+
+      - name: Prepare artifact folder with build output
+        run: |
+          mkdir -p artifact
+          if [ -d build ]; then
+            echo "Using ./build as publish folder"
+            cp -r build/. artifact/
+          elif [ -d dist ]; then
+            echo "Using ./dist as publish folder"
+            cp -r dist/. artifact/
+          elif [ -d public ]; then
+            echo "Using ./public as publish folder"
+            cp -r public/. artifact/
+          elif [ -d docs ]; then
+            echo "Using ./docs as publish folder"
+            cp -r docs/. artifact/
+          else
+            echo "No common build output folder found (build/dist/public/docs)."
+            echo "If your output folder is different, update .github/workflows/deploy-pages.yml to point to it."
+            ls -la
+            exit 1
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: ./artifact
+
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v1
